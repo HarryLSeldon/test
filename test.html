@@ -1,0 +1,152 @@
+<div id="desktop-banner" style="overflow: hidden; width: 100%; justify-content: center;">
+  <div id="status-banner" 
+       style="display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: Arial, sans-serif;">
+    
+    <div id="open-status" style="font-weight:bold;font-size:1.4em;padding:8px 12px;text-align:center;border-radius:6px;color:white;background-color:gray;box-shadow:0 2px 5px rgba(0,0,0,0.2);width:fit-content;overflow:hidden;white-space:nowrap;"></div>
+    
+    <div id="happy-hour" style="font-weight:bold;font-size:1.4em;padding:8px 12px;text-align:center;border-radius:6px;color:white;background-color:#f39c12;box-shadow:0 2px 5px rgba(0,0,0,0.2);width:fit-content;overflow:hidden;white-space:nowrap;"></div>
+  
+  </div>
+</div>
+
+<script>
+  function initBanner() {
+    const banner = document.getElementById("desktop-banner");
+    
+    // Remove banner on mobile
+    if (window.innerWidth <= 1024) {
+      if (banner) banner.remove();
+      return;
+    }
+
+    // --- Open/Closed & Happy Hour ---
+    const barHours = {
+      0:[[12,0,18,0]], 1:null, 2:null,
+      3:[[12,0,22,0]], 4:[[12,0,22,0]],
+      5:[[12,0,0,0]], 6:[[12,0,0,0]]
+    };
+    const kitchenHours = {
+      0:[[12,0,16,0]], 1:null, 2:null,
+      3:[[12,0,15,0],[17,0,19,30]],
+      4:[[12,0,15,0],[17,0,19,30]],
+      5:[[12,0,15,0],[17,0,20,0]],
+      6:[[12,0,20,0]]
+    };
+
+    const happyDays = [0,3,4,5]; 
+    const startHour = 16, endHour = 19;
+    const daysFull = ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"];
+
+    function formatTime(h, m) {
+      let a = h >= 12 ? 'PM' : 'AM';
+      h = h % 12 || 12;
+      return h + ':' + (m < 10 ? '0' + m : m) + ' ' + a;
+    }
+
+    // --- Updated nextOpening to handle split shifts ---
+    function nextOpening(day, hoursObj) {
+      const now = new Date(), min = now.getHours() * 60 + now.getMinutes();
+      for (let i = 0; i < 7; i++) {
+        let d = (day + i) % 7;
+        let periods = hoursObj[d];
+        if (!periods) continue;
+        for (let p of periods) {
+          const startMin = p[0]*60 + p[1];
+          if (i === 0 && startMin > min) return [d, p[0], p[1]]; // later today
+          if (i > 0) return [d, p[0], p[1]]; // future day
+        }
+      }
+      return null;
+    }
+
+    function isOpen(arr, min) {
+      if (!arr) return false;
+      for (let p of arr) {
+        if (min >= p[0]*60+p[1] && min < p[2]*60+p[3]) return true;
+      }
+      return false;
+    }
+
+    function formatNextDay(today, targetDay) {
+      if (today === targetDay) return "Today";
+      if ((today + 1) % 7 === targetDay) return "Tomorrow";
+      return daysFull[targetDay];
+    }
+
+    function updateOpenStatus() {
+      const now = new Date(), day = now.getDay(), min = now.getHours()*60 + now.getMinutes();
+      const bar = isOpen(barHours[day], min), kitchen = isOpen(kitchenHours[day], min);
+      const el = document.getElementById("open-status");
+      let s = '', bg = '#c0392b';
+
+      if (bar && kitchen) {
+        s = 'Bar and Kitchen Open';
+        bg = '#27ae60';
+      } 
+      else if (bar) {
+        let nk = nextOpening(day, kitchenHours);
+        s = 'Bar Open' + (nk ? ` | Kitchen opens ${formatNextDay(day,nk[0])} at ${formatTime(nk[1],nk[2])}` : '');
+        bg = '#27ae60';
+      } 
+      else if (kitchen) {
+        let nb = nextOpening(day, barHours);
+        s = 'Kitchen Open' + (nb ? ` | Bar opens ${formatNextDay(day,nb[0])} at ${formatTime(nb[1],nb[2])}` : '');
+        bg = '#27ae60';
+      } 
+      else {
+        let nb = nextOpening(day, barHours), nk = nextOpening(day, kitchenHours);
+        
+        if (nb && nk && nb[0] === nk[0] && nb[1] === nk[1] && nb[2] === nk[2]) {
+          s = `Closed | Opens again ${formatNextDay(day, nb[0])} at ${formatTime(nb[1], nb[2])}`;
+        } else {
+          let parts = [];
+          if (nb) parts.push(`Bar opens ${formatNextDay(day, nb[0])} at ${formatTime(nb[1], nb[2])}`);
+          if (nk) parts.push(`Kitchen opens ${formatNextDay(day, nk[0])} at ${formatTime(nk[1], nk[2])}`);
+          s = 'Closed | ' + parts.join(' | ');
+        }
+        bg = '#c0392b';
+      }
+
+      el.textContent = s;
+      el.style.backgroundColor = bg;
+    }
+
+    function nextHappyHour() {
+      const now = new Date(), day = now.getDay(), hour = now.getHours();
+      for (let i = 0; i < 7; i++) {
+        let d = (day + i) % 7;
+        if (happyDays.includes(d)) {
+          if (i === 0 && hour < endHour) 
+            return `${formatNextDay(day, d)} 4PM–7PM`;
+          else if (i > 0 || hour < startHour) 
+            return `${formatNextDay(day, d)} 4PM–7PM`;
+        }
+      }
+      return null;
+    }
+
+    function updateHappyHour() {
+      const el = document.getElementById("happy-hour");
+      const now = new Date(), day = now.getDay(), hour = now.getHours();
+      if (happyDays.includes(day) && hour >= startHour && hour < endHour) {
+        el.textContent = 'Happy Hour Now! 🍻 50p off any pint';
+        el.style.backgroundColor = '#27ae60';
+      } else {
+        el.textContent = 'Next Happy Hour: ' + nextHappyHour();
+        el.style.backgroundColor = '#f39c12';
+      }
+    }
+
+    function updateStatus() { 
+      updateOpenStatus(); 
+      updateHappyHour(); 
+    }
+
+    updateStatus();
+    setInterval(updateStatus, 60000);
+  }
+
+  // Initialize banner
+  initBanner();
+  window.addEventListener('resize', initBanner);
+</script>
